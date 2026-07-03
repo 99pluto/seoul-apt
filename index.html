@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>서울 아파트 시세 지도 — 동별 대장아파트 10년 추이</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="seoul_apt_data.js"></script>
+<style>
+:root{--bg:#0f1420;--panel:#171e2e;--panel2:#1e2740;--line:#2a3450;--txt:#e8ecf5;--sub:#8b96b0;--acc:#4da3ff;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:var(--bg);color:var(--txt);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+header h1{font-size:17px;font-weight:700;white-space:nowrap}
+header h1 span{color:var(--acc)}
+.ctrl{display:flex;align-items:center;gap:10px}
+.sizebtns{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.sizebtns button{background:transparent;border:0;color:var(--sub);padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600}
+.sizebtns button.on{background:var(--acc);color:#fff}
+.yearwrap{display:flex;align-items:center;gap:10px;flex:1;min-width:260px;max-width:520px}
+#yearLabel{font-size:16px;font-weight:800;color:var(--acc);width:72px;text-align:center;white-space:nowrap}
+input[type=range]{flex:1;accent-color:var(--acc)}
+#playBtn{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px}
+main{flex:1;display:flex;min-height:0}
+#map{flex:1.5;min-width:0;background:#0b0f18}
+aside{width:400px;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h2{font-size:13px;color:var(--sub);font-weight:700;margin-bottom:10px;letter-spacing:.3px}
+.card h2 b{color:var(--txt);font-size:14px}
+#detTitle{font-size:16px;font-weight:800}
+#detSub{font-size:12px;color:var(--sub);margin:2px 0 10px}
+.stats{display:flex;gap:8px;margin-bottom:10px}
+.stat{flex:1;background:var(--panel);border-radius:8px;padding:8px;text-align:center}
+.stat .v{font-size:15px;font-weight:800;color:var(--acc)}
+.stat .k{font-size:11px;color:var(--sub);margin-top:2px}
+.chartbox{position:relative;height:190px}
+ol#rank{list-style:none}
+ol#rank li{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;border-bottom:1px dashed var(--line);cursor:pointer}
+ol#rank li:last-child{border-bottom:0}
+ol#rank .n{width:20px;color:var(--sub);font-weight:700;font-size:12px}
+ol#rank .d{flex:1}
+ol#rank .d small{color:var(--sub);display:block;font-size:11px}
+ol#rank .pct{font-weight:800;color:#ff6b6b}
+#analysis p{font-size:12.5px;line-height:1.75;color:#c6cede;margin-bottom:8px}
+#analysis b{color:var(--txt)}
+.legend{position:absolute;bottom:18px;left:12px;z-index:900;background:rgba(15,20,32,.88);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--sub)}
+.legend .t{color:var(--txt);font-weight:700;margin-bottom:6px;font-size:12px}
+.legend .row{display:flex;align-items:center;gap:6px;margin:2px 0}
+.legend .sw{width:22px;height:10px;border-radius:2px}
+.leaflet-popup-content-wrapper{background:var(--panel2);color:var(--txt);border-radius:10px}
+.leaflet-popup-tip{background:var(--panel2)}
+.pop{font-size:12px;line-height:1.6}
+.pop b{font-size:13px}
+.pop .apt{color:var(--acc)}
+footer{padding:6px 20px;background:var(--panel);border-top:1px solid var(--line);font-size:11px;color:var(--sub)}
+@media(max-width:900px){main{flex-direction:column}aside{width:100%;max-height:45%}}
+</style>
+</head>
+<body>
+<header>
+  <h1>서울 아파트 시세 지도 <span>· 동별 대장아파트 10년 추이</span></h1>
+  <div class="ctrl sizebtns" id="sizeBtns"></div>
+  <div class="ctrl yearwrap">
+    <button id="playBtn">▶ 재생</button>
+    <input type="range" id="yearSlider" min="0" max="9" value="9" step="1">
+    <div id="yearLabel"></div>
+  </div>
+</header>
+<main>
+  <div id="map" style="position:relative">
+    <div class="legend" id="legend"></div>
+  </div>
+  <aside>
+    <div class="card" id="detail">
+      <div id="detTitle">동을 선택하세요</div>
+      <div id="detSub">지도의 원을 클릭하면 해당 동 대장아파트의 10년 시세를 보여줍니다</div>
+      <div class="stats" id="detStats" style="display:none">
+        <div class="stat"><div class="v" id="stPpy">–</div><div class="k">평당가(만원)</div></div>
+        <div class="stat"><div class="v" id="stAvg">–</div><div class="k">평균매매가</div></div>
+        <div class="stat"><div class="v" id="stChg">–</div><div class="k">10년 변동</div></div>
+      </div>
+      <div class="chartbox"><canvas id="detChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2><b>권역별 평균 평당가 추이</b> · 만원/평</h2>
+      <div class="chartbox"><canvas id="regChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2><b>10년 상승률 TOP 10</b> · <span id="rankSize"></span></h2>
+      <ol id="rank"></ol>
+    </div>
+    <div class="card" id="analysis">
+      <h2><b>10년 추이 분석</b></h2>
+      <p><b>① 2016~2021 대세 상승기.</b> 저금리·유동성 확대와 공급 부족이 겹치며 서울 전역이 상승했다. 특히 2020~21년에는 중저가 지역(노원·도봉·강북 등)까지 갭투자 수요가 확산되며 외곽이 가장 가파르게 올랐다.</p>
+      <p><b>② 2022~2023 금리발 조정기.</b> 기준금리 급등으로 거래가 급감하며 고점 대비 20~30% 하락. 상승폭이 컸던 외곽·중저가 지역의 낙폭이 가장 깊었다.</p>
+      <p><b>③ 2024~2025 재상승과 초양극화.</b> 강남3구·마용성 등 핵심지가 전고점을 돌파하며 급등한 반면, 노도강 등 외곽은 2021년 고점을 아직 회복하지 못했다. '똘똘한 한 채' 선호가 지역 간 격차를 사상 최대로 벌렸다.</p>
+      <p><b>④ 2026년 현재.</b> 급등 피로감과 규제로 강남3구 국평 평당가가 전년 대비 약 12% 조정되는 등 숨 고르기 국면. 다만 공급 부족 우려로 한강벨트 중심의 하방 경직성은 여전히 강하다.</p>
+      <p style="color:var(--sub);font-size:11.5px">※ 본 데이터는 실제 시장 흐름을 반영한 <b>추정치</b>입니다. 정확한 실거래가는 국토교통부 실거래가 공개시스템(rt.molit.go.kr)을 확인하세요.</p>
+    </div>
+  </aside>
+</main>
+<footer>데이터: 동별 대장아파트 124곳 · 2016~2025 반기별 평당가/평균매매가 (추정) · 등고선: 평당가 IDW 보간</footer>
+
+<script>
+const DATA = SEOUL_APT_DATA, YEARS = DATA.meta.years, DONGS = DATA.dongs;
+function fmtPeriod(p){ return String(p).replace(/^(\d{4})(상|하)$/, '$1년 $2반기'); }
+let sizeKey = 'm', yearIdx = YEARS.length - 1, selected = null, playing = null;
+
+// ---------- 색상 ----------
+const THRESH = [1500, 2500, 3500, 4500, 5500, 7000, 9000, 12000, 15000];
+function priceColor(v){
+  const t = Math.max(0, Math.min(1, (Math.log(v) - Math.log(2200)) / (Math.log(17000) - Math.log(2200))));
+  return d3.interpolateTurbo(0.08 + t * 0.84);
+}
+
+// ---------- 지도 ----------
+const map = L.map('map', {zoomControl:true}).setView([37.552, 126.99], 12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  {attribution:'© OpenStreetMap · © CARTO', maxZoom:18}).addTo(map);
+
+// ---------- IDW 격자 + 등고선 ----------
+const BB = {lng0:126.76, lng1:127.21, lat0:37.41, lat1:37.72}, NX = 120, NY = 90;
+function computeGrid(){
+  const pts = DONGS.map(d => ({x:d.lng, y:d.lat, v:d.prices[sizeKey].ppy[yearIdx]}));
+  const vals = new Float64Array(NX * NY);
+  for(let j = 0; j < NY; j++){
+    const lat = BB.lat1 - (j + .5) / NY * (BB.lat1 - BB.lat0);
+    for(let i = 0; i < NX; i++){
+      const lng = BB.lng0 + (i + .5) / NX * (BB.lng1 - BB.lng0);
+      let sw = 0, swv = 0, nearest = 1e9;
+      for(const p of pts){
+        const dx = (p.x - lng) * 0.79, dy = p.y - lat; // 경도 축척 보정
+        const d2 = dx*dx + dy*dy;
+        if(d2 < nearest) nearest = d2;
+        const w = 1 / Math.pow(d2 + 1e-7, 1.3);
+        sw += w; swv += w * p.v;
+      }
+      // 표본에서 먼 곳(서울 외곽 밖)은 0 → 등고선 미표시
+      vals[j * NX + i] = Math.sqrt(nearest) > 0.045 ? 0 : swv / sw;
+    }
+  }
+  return vals;
+}
+let contourLayer = null;
+function gx2lng(x){ return BB.lng0 + x / NX * (BB.lng1 - BB.lng0); }
+function gy2lat(y){ return BB.lat1 - y / NY * (BB.lat1 - BB.lat0); }
+function drawContours(){
+  const vals = computeGrid();
+  const cons = d3.contours().size([NX, NY]).thresholds(THRESH)(vals);
+  if(contourLayer) contourLayer.remove();
+  contourLayer = L.layerGroup();
+  for(const c of cons){
+    if(!c.coordinates.length) continue;
+    const latlngs = c.coordinates.map(poly => poly.map(ring => ring.map(pt => [gy2lat(pt[1]), gx2lng(pt[0])])));
+    L.polygon(latlngs, {stroke:true, color:priceColor(c.value*1.15), weight:1.2, opacity:.75,
+      fillColor:priceColor(c.value*1.15), fillOpacity:.16, interactive:false}).addTo(contourLayer);
+  }
+  contourLayer.addTo(map);
+}
+
+// ---------- 마커 ----------
+const markers = {};
+function fmtEok(v){ return v >= 10 ? v.toFixed(1) + '억' : v.toFixed(1) + '억'; }
+function popupHtml(d){
+  const p = d.prices[sizeKey];
+  return `<div class="pop"><b>${d.gu} ${d.dong}</b><br><span class="apt">${d.apt}</span><br>
+  ${fmtPeriod(YEARS[yearIdx])} · ${DATA.meta.sizes.find(s=>s.key===sizeKey).label}<br>
+  평당가 <b>${p.ppy[yearIdx].toLocaleString()}만원</b> · 평균 <b>${fmtEok(p.avg[yearIdx])}</b></div>`;
+}
+function makeMarkers(){
+  DONGS.forEach(d => {
+    const m = L.circleMarker([d.lat, d.lng], {radius:7, weight:1.5, color:'#0f1420', fillOpacity:.95})
+      .addTo(map).on('click', () => selectDong(d));
+    m.bindTooltip('', {direction:'top', offset:[0,-6]});
+    markers[d.dong + d.apt] = m;
+  });
+}
+function refreshMarkers(){
+  DONGS.forEach(d => {
+    const m = markers[d.dong + d.apt], v = d.prices[sizeKey].ppy[yearIdx];
+    m.setStyle({fillColor:priceColor(v)});
+    m.setTooltipContent(`${d.dong} · ${v.toLocaleString()}만/평`);
+  });
+}
+
+// ---------- 상세 차트 ----------
+let detChart = null;
+function selectDong(d){
+  selected = d;
+  document.getElementById('detTitle').textContent = `${d.gu} ${d.dong} — ${d.apt}`;
+  document.getElementById('detStats').style.display = 'flex';
+  updateDetail();
+  map.panTo([d.lat, d.lng]);
+}
+function updateDetail(){
+  if(!selected) return;
+  const d = selected, p = d.prices[sizeKey];
+  document.getElementById('detSub').textContent = `${DATA.meta.sizes.find(s=>s.key===sizeKey).label} 기준 · ${fmtPeriod(YEARS[yearIdx])}`;
+  document.getElementById('stPpy').textContent = p.ppy[yearIdx].toLocaleString();
+  document.getElementById('stAvg').textContent = fmtEok(p.avg[yearIdx]);
+  const chg = (p.ppy[YEARS.length-1] / p.ppy[0] - 1) * 100;
+  document.getElementById('stChg').textContent = (chg >= 0 ? '+' : '') + chg.toFixed(0) + '%';
+  const sizes = DATA.meta.sizes, colors = ['#7dd3fc', '#4da3ff', '#c084fc'];
+  const ds = sizes.map((s, i) => ({
+    label: s.label.split(' ')[0], data: d.prices[s.key].ppy,
+    borderColor: colors[i], backgroundColor: colors[i],
+    borderWidth: s.key === sizeKey ? 3 : 1.5, pointRadius: 2, tension: .3
+  }));
+  if(detChart) detChart.destroy();
+  detChart = new Chart(document.getElementById('detChart'), {
+    type: 'line', data: {labels: YEARS, datasets: ds},
+    options: chartOpts((ctx) => {
+      const k = sizes[ctx.datasetIndex].key;
+      return ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}만/평 (평균 ${fmtEok(d.prices[k].avg[ctx.dataIndex])})`;
+    })
+  });
+}
+
+// ---------- 권역 차트 ----------
+const REGIONS = {
+  '강남3구': ['강남구','서초구','송파구'],
+  '마용성': ['마포구','용산구','성동구'],
+  '노도강': ['노원구','도봉구','강북구'],
+  '서울 평균': null
+};
+let regChart = null;
+function drawRegionChart(){
+  const colors = {'강남3구':'#ff6b6b','마용성':'#ffd166','노도강':'#4da3ff','서울 평균':'#9aa5bf'};
+  const ds = Object.entries(REGIONS).map(([name, gus]) => {
+    const pool = gus ? DONGS.filter(d => gus.includes(d.gu)) : DONGS;
+    const data = YEARS.map((_, i) => Math.round(pool.reduce((a, d) => a + d.prices[sizeKey].ppy[i], 0) / pool.length));
+    return {label:name, data, borderColor:colors[name], backgroundColor:colors[name],
+      borderWidth:2, pointRadius:2, tension:.3, borderDash: gus ? [] : [5,4]};
+  });
+  if(regChart) regChart.destroy();
+  regChart = new Chart(document.getElementById('regChart'), {
+    type:'line', data:{labels:YEARS, datasets:ds},
+    options: chartOpts(ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}만/평`)
+  });
+}
+function chartOpts(tooltipFmt){
+  return {responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+    plugins:{legend:{labels:{color:'#c6cede', boxWidth:12, font:{size:11}}},
+      tooltip:{callbacks:{label:tooltipFmt}}},
+    scales:{x:{ticks:{color:'#8b96b0', font:{size:10}}, grid:{color:'#242e48'}},
+      y:{ticks:{color:'#8b96b0', font:{size:10}, callback:v=>v.toLocaleString()}, grid:{color:'#242e48'}}}};
+}
+
+// ---------- 랭킹 ----------
+function drawRank(){
+  document.getElementById('rankSize').textContent = DATA.meta.sizes.find(s=>s.key===sizeKey).label + ' 평당가 기준';
+  const arr = DONGS.map(d => {
+    const p = d.prices[sizeKey].ppy;
+    return {d, chg: (p[p.length-1] / p[0] - 1) * 100};
+  }).sort((a, b) => b.chg - a.chg).slice(0, 10);
+  document.getElementById('rank').innerHTML = arr.map((r, i) =>
+    `<li onclick='selectByKey("${r.d.dong}","${r.d.apt}")'><span class="n">${i+1}</span>
+     <span class="d">${r.d.gu} ${r.d.dong}<small>${r.d.apt}</small></span>
+     <span class="pct">+${r.chg.toFixed(0)}%</span></li>`).join('');
+}
+function selectByKey(dong, apt){
+  const d = DONGS.find(x => x.dong === dong && x.apt === apt);
+  if(d) selectDong(d);
+}
+
+// ---------- 범례 ----------
+function drawLegend(){
+  const rows = THRESH.map((t, i) => {
+    const next = THRESH[i+1];
+    return `<div class="row"><span class="sw" style="background:${priceColor(t*1.15)}"></span>${t.toLocaleString()}${next ? '~' + next.toLocaleString() : '+'}만/평</div>`;
+  }).join('');
+  document.getElementById('legend').innerHTML = `<div class="t">평당가 등고선</div>${rows}`;
+}
+
+// ---------- 컨트롤 ----------
+const sizeBtnsEl = document.getElementById('sizeBtns');
+DATA.meta.sizes.forEach(s => {
+  const b = document.createElement('button');
+  b.textContent = s.label;
+  b.dataset.key = s.key;
+  if(s.key === sizeKey) b.classList.add('on');
+  b.onclick = () => { sizeKey = s.key;
+    sizeBtnsEl.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.key === sizeKey));
+    refreshAll(); };
+  sizeBtnsEl.appendChild(b);
+});
+const slider = document.getElementById('yearSlider');
+slider.max = YEARS.length - 1; slider.value = yearIdx;
+slider.oninput = () => { yearIdx = +slider.value; refreshYear(); };
+document.getElementById('playBtn').onclick = function(){
+  if(playing){ clearInterval(playing); playing = null; this.textContent = '▶ 재생'; return; }
+  this.textContent = '⏸ 정지';
+  if(yearIdx >= YEARS.length - 1) yearIdx = -1;
+  playing = setInterval(() => {
+    yearIdx++;
+    if(yearIdx >= YEARS.length - 1){ clearInterval(playing); playing = null; document.getElementById('playBtn').textContent = '▶ 재생'; }
+    slider.value = yearIdx; refreshYear();
+  }, 550);
+};
+
+function refreshYear(){
+  document.getElementById('yearLabel').textContent = YEARS[yearIdx];
+  drawContours(); refreshMarkers(); updateDetail();
+}
+function refreshAll(){ refreshYear(); drawRegionChart(); drawRank(); }
+
+// ---------- 초기화 ----------
+makeMarkers();
+drawLegend();
+refreshAll();
+selectDong(DONGS.find(d => d.dong === '반포동'));
+</script>
+</body>
+</html>
