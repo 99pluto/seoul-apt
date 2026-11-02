@@ -7,7 +7,8 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+<script>window.Chart||document.write('<script src="https://unpkg.com/chart.js@4.4.4/dist/chart.umd.js"><\/script>')</script>
 <script src="seoul_apt_data.js"></script>
 <style>
 :root{--bg:#0f1420;--panel:#171e2e;--panel2:#1e2740;--line:#2a3450;--txt:#e8ecf5;--sub:#8b96b0;--acc:#4da3ff;}
@@ -118,8 +119,23 @@ function priceColor(v){
 
 // ---------- 지도 ----------
 const map = L.map('map', {zoomControl:true}).setView([37.552, 126.99], 12);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  {attribution:'© OpenStreetMap · © CARTO', maxZoom:18}).addTo(map);
+// CARTO 키를 발급받아 넣으면 기존 CARTO 다크 지도로 표시됩니다. 비워 두면 키가 필요 없는 Esri 다크 지도를 씁니다.
+const CARTO_API_KEY = '';
+if(CARTO_API_KEY){
+  L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${CARTO_API_KEY}`,
+    {attribution:'© OpenStreetMap contributors · © CARTO', maxZoom:18}).addTo(map);
+}else{
+  const ESRI = 'https://{s}.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+  const esriOpts = {subdomains:['server','services'], maxNativeZoom:16, maxZoom:18};
+  L.tileLayer(ESRI + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    {...esriOpts, attribution:'Tiles © Esri — HERE, DeLorme, MapmyIndia, © OpenStreetMap contributors'}).addTo(map);
+  // 지명 라벨은 등고선 위에 표시 (클릭은 통과)
+  map.createPane('mapLabels');
+  map.getPane('mapLabels').style.zIndex = 450;
+  map.getPane('mapLabels').style.pointerEvents = 'none';
+  L.tileLayer(ESRI + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+    {...esriOpts, pane:'mapLabels'}).addTo(map);
+}
 
 // ---------- IDW 격자 + 등고선 ----------
 const BB = {lng0:126.76, lng1:127.21, lat0:37.41, lat1:37.72}, NX = 120, NY = 90;
